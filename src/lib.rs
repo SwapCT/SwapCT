@@ -3,3 +3,4 @@ pub mod external;
 pub mod constants;
 
 pub mod vsigma;
+pub mod seal;
