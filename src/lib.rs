@@ -5,3 +5,4 @@ pub mod constants;
 pub mod vsigma;
 pub mod seal;
 pub mod lpke;
+pub mod account;
