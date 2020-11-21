@@ -1,3 +1,5 @@
+pub mod commitment;
+
 #[cfg(test)]
 mod tests {
     #[test]
