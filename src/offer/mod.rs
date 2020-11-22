@@ -130,14 +130,14 @@ impl Offer {
     }
 }
 
+pub fn get_test_ring(n: usize) -> Vec<OTAccount> {
+    let accounts = vec![OTAccount::default(); n];
+    accounts
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    pub fn get_test_ring(n: usize) -> Vec<OTAccount> {
-        let accounts = vec![OTAccount::default(); n];
-        accounts
-    }
 
     #[test]
     fn create_offer() {

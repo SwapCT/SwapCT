@@ -100,11 +100,7 @@ impl Transaction {
 mod tests {
     use super::*;
     use crate::commitment::TypeCommitment;
-
-    pub fn get_test_ring(n: usize) -> Vec<OTAccount> {
-        let accounts = vec![OTAccount::default(); n];
-        accounts
-    }
+    use crate::offer::get_test_ring;
 
     #[test]
     fn create_offer() {
