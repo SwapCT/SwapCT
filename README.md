@@ -26,7 +26,9 @@ To run the unit tests, use
     docker build --tag swapct .
     docker run -v "$(pwd)/plots:/usr/src/swapct/plots" --rm -it swapct -r 1019 -o 20 -s 30
 
-enjoy your plot in `plots/main.pdf`
+enjoy your plot in `plots/main.pdf` which will look like
+
+![Example Plot](plots/example.png)
 
 ### Manually
 
