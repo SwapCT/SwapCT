@@ -21,6 +21,15 @@ To run the unit tests, use
     
 ## Performance Reproducibility
 
+### With docker
+
+    docker build --tag swapct .
+    docker run -v "$(pwd)/plots:/usr/src/swapct/plots" --rm -it swapct -r 1019 -o 20 -s 30
+
+enjoy your plot in `plots/main.pdf`
+
+### Manually
+
 As the authors promote the creation of reproducible results and it is hard to give absolute performance figures, 
 we encourage you to recreate the generation and verification times in your environment.
 
