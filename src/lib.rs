@@ -6,3 +6,4 @@ pub mod vsigma;
 pub mod seal;
 pub mod lpke;
 pub mod account;
+pub mod ringsig;
