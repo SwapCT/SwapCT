@@ -2,3 +2,6 @@
 .idea
 plots/generation.tex
 plots/verification.tex
+plots/main.aux
+plots/main.log
+plots/main.pdf
