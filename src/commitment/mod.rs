@@ -63,6 +63,22 @@ impl TypeCommitment {
     pub fn publish(&self) -> TypeCommitment {
         TypeCommitment{etype: self.etype, com: self.com, ..Default::default()}
     }
+
+    pub fn is_consistent(&self) -> bool {
+        match self.typ {
+            Some(typ) => match self.amount {
+                Some(amt) => match self.type_randomness {
+                    Some(typ_r) => match self.randomness {
+                        Some(r) => &TypeCommitment::commit(&typ,&amt,&typ_r, &r) == self,
+                        _ => false
+                    },
+                    _ => false
+                },
+                _ => false
+            },
+            _ => false
+        }
+    }
 }
 
 

@@ -8,3 +8,5 @@ pub mod lpke;
 pub mod account;
 pub mod ringsig;
 pub mod aasig;
+pub mod offer;
+pub mod transaction;
