@@ -158,8 +158,9 @@ mod tests {
         let off = Offer::offer(&vec![ota], &vec![(&acct, &typ, &Scalar::from(6u64))], &vec![get_test_ring(3)]);
 
         let puboff = off.publish();
-
         let serialized = serde_json::to_string(&puboff).unwrap();
         //println!("serialized = {}", serialized);
+        let deserialized: Offer = serde_json::from_str(&serialized).unwrap();
+        assert!(deserialized.verify().is_ok());
     }
 }
