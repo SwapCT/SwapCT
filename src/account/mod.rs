@@ -9,6 +9,7 @@ use serde::{Serialize, Deserialize};
 use crate::commitment::{TypeCommitment, Type};
 use crate::lpke::Ciphertext;
 use crate::constants::PEDERSEN_H;
+use crate::aasig;
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,6 +69,23 @@ impl Default for OTAccount{
     }
 }
 
+impl aasig::AAMsg for OTAccount {
+    fn to_byte_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(96);
+        buf.extend_from_slice(self.pk.compress().as_bytes());
+        buf.extend_from_slice(self.com.com.compress().as_bytes());
+        buf.extend_from_slice(self.com.etype.unwrap().compress().as_bytes());
+        buf
+    }
+
+    fn publish(&self) -> OTAccount {
+        OTAccount{
+            pk: self.pk,
+            com: self.com.publish(),
+            ..Default::default()
+        }
+    }
+}
 
 impl Account {
 

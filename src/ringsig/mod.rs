@@ -332,6 +332,7 @@ mod tests {
     use super::*;
     use rand::thread_rng;
     use crate::account::Account;
+    use crate::aasig::AAMsg;
 
     #[test]
     fn bpsetsig_create() {
@@ -350,7 +351,7 @@ mod tests {
 
         let sigma = BPRingSig::sign(&mut prover_transcript, &accounts, 3, &com, &msg).expect("work not");
 
-        //accounts[3] = accounts[3].publish();
+        accounts[3] = accounts[3].publish();
 
         let mut verifier_transcript = Transcript::new(b"test example");
 
