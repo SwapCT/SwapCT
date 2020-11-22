@@ -23,10 +23,17 @@ To run the unit tests, use
 
 ### With docker
 
-    docker build --tag swapct .
-    docker run -v "$(pwd)/plots:/usr/src/swapct/plots" --rm -it swapct -r 1019 -o 20 -s 30
+Given a working docker environment, you build and run a container with
 
-enjoy your plot in `plots/main.pdf` which will look like
+    docker build --tag swapct .
+    docker run -v "$(pwd)/plots:/usr/src/swapct/plots" --rm -it swapct -r 11 -o 20 -s 5
+
+The following options are available:
+* r is the ring size used for the input ring signatures. This has to be of the form 2^x-5
+* o is the maximum number of outputs. It will calculate the times from 1 input and output up to the specified value-
+* s is the number of measurements performed for each setting.
+
+Enjoy your plot in `plots/main.pdf` which will look like
 
 ![Example Plot](plots/example.png)
 
@@ -45,10 +52,6 @@ which presents you a progress bar and the parameters used, e.g.
       Running `target/release/plots -r 27 -o 5 -s 4`
     using Opt { statistics: 4, outputs: 5, ring: 27 }
     [00:00:00] [##########>-----------------------------] 5/20 (1s)
-
-* -r is the ring size used for the input ring signatures. This has to be of the form 2^x-5
-* -o is the maximum number of outputs. It will calculate the times from 1 input and output up to the specified value-
-* -s is the number of measurements performed for each setting.
 
 The program outputs two files `plots/generation.tex` and `plots/verification.tex`. 
 To plot them nicely in comparison to the authors measurements, change to the plots directory and compile the `main.tex` with `pdflatex`
