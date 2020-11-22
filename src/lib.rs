@@ -7,3 +7,4 @@ pub mod seal;
 pub mod lpke;
 pub mod account;
 pub mod ringsig;
+pub mod aasig;
