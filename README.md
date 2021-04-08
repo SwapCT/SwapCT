@@ -1,13 +1,10 @@
-# SwapCT Proof of Concept
+# Omniring Performance Evaluation
 
-This repository serves as a Proof of Concept implementation of the Swap Confidential Transaction system.
+This repository serves as a Proof of Concept implementation of the Omniring system.
+https://eprint.iacr.org/2019/580.pdf
 
 # ATTENTION
 This code is not secure! Do not use it in any relevant setting.
-
-## Review
-
-While the corresponding paper is under review, this repository will not reveal the authors for double-blind purposes.
 
 # Usage
 
@@ -18,33 +15,29 @@ You need a recent (1.48) rust installation with cargo.
 To run the unit tests, use
 
     cargo test
-    
-## Performance Reproducibility
 
-### With docker
+# Performance
 
-Given a working docker environment, you build and run a container with
+![Performance Plot](plots/example.png)
 
-    docker build --tag swapct .
-    docker run -v "$(pwd)/plots:/usr/src/swapct/plots" --rm -it swapct -r 11 -o 20 -s 5
+(a) Transaction generation and (b) transaction verification in SwapCT and Omniring with same number of inputs and outputs and a ring size r=123.
+In SwapCT, each input has a separate anonymity set of size r while in Omniring, all inputs share one anonymity set of size r.
+The points show the median and the error bars the minimum and maximum time of 30 runs.
 
-The following options are available:
-* r is the ring size used for the input ring signatures. This has to be of the form 2^x-5
-* o is the maximum number of outputs. It will calculate the times from 1 input and output up to the specified value-
-* s is the number of measurements performed for each setting.
+## Observations
+In Omniring, there is a noticable step from 10 inputs and outputs to 11 as the size of the Bulletproof witness changes from 2026 to 2216 elements and the power of 2 padding increases this to 2^12=4096.
+In SwapCT, the jump from 12 to 13 is explained by a similar padding from an 938 element witness for 12 inputs and outputs to 1029 elements for 13, which is padded to 2^11=2048.
+For a ring size of 11, Omniring sucessfully fails to have more than 11 inputs as all slots of the ring signature are used already.
 
-Enjoy your plot in `plots/main.pdf` which will look like
 
-![Example Plot](plots/example.png)
-
-### Manually
+# Run Manually
 
 As the authors promote the creation of reproducible results and it is hard to give absolute performance figures, 
 we encourage you to recreate the generation and verification times in your environment.
 
 To generate the timings run
 
-    cargo run --bin plots --release -- -r 27 -o 20 -s 30 
+    cargo run --bin plots --release -- -r 123 -o 20 -s 30 
 
 which presents you a progress bar and the parameters used, e.g.
     

@@ -6,39 +6,36 @@
 
 \pagestyle{empty}
 \begin{document}
- 
- \begin{figure}
-  \begin{tikzpicture}
-   \begin{axis}[xlabel={(a) \# inputs and outputs}, 
-                ylabel={Generation time in s}, 
-                legend style={at={(0.03,0.97)},anchor=north west},width=\textwidth,
-                mark size=1pt, height=9cm]
-    \input{gen123swapct}
-    \input{gen11swapct} 
-    
-    \input{gen123monero}
-    \input{gen11monero}
-    
-    \input{generation} 
-   \end{axis}
-  \end{tikzpicture}
-    
-  \begin{tikzpicture}
-   \begin{axis}[xlabel={(b) \# inputs and outputs}, 
-                ylabel={Verification time in ms},
-                legend style={at={(0.03,0.97)},anchor=north west}, width=\textwidth, 
-                mark size=1pt, height=9cm]
-    \input{ver123swapct}
-    \input{ver11swapct}
-    
-    \input{ver123monero}
-    \input{ver11monero}
 
-    \input{verification}
-   \end{axis}
-  \end{tikzpicture}
-    
-    
-  \caption{(a) Transaction generation and (b) transaction verification in SwapCT and Monero (\texttt{RCTsimple}) with same number of inputs and outputs for two different ring sizes $r\in\{11,123\}$. The points show the median and the error bars the minimum and maximum time of 30 runs.}
- \end{figure}
+    \begin{figure}
+        \begin{tikzpicture}
+            \begin{axis}[xlabel={(a) \# inputs and outputs},
+            ylabel={Generation time in s},
+            legend style={at={(0.03,0.97)},anchor=north west},width=\textwidth,
+            mark size=1pt, height=9cm]
+                \input{generation_swap.tex}
+                \input{generation_123.tex}
+                \input{generation.tex}
+            \end{axis}
+        \end{tikzpicture}
+
+        \begin{tikzpicture}
+            \begin{axis}[xlabel={(b) \# inputs and outputs},
+            ylabel={Verification time in ms},
+            legend style={at={(0.03,0.97)},anchor=north west}, width=\textwidth,
+            mark size=1pt, height=9cm]
+                \input{verification_swap.tex}
+                \input{verification_123.tex}
+                \input{verification.tex}
+            \end{axis}
+        \end{tikzpicture}
+
+
+        \caption{(a) Transaction generation and (b) transaction verification in SwapCT and Omniring with same number of inputs and outputs and a ring size $r=123$.
+        In SwapCT, each input has a separate anonymity set of size $r$ while in Omniring, all inputs share one anonymity set of size $r$.
+        In Omniring, there is a noticable step from $10$ inputs and outputs to $11$ as the size of the Bulletproof witness changes from $2026$ to $2216$ elements and the power of $2$ padding increases this to $2^{12}=4096$.
+        In SwapCT, the jump from $12$ to $13$ is explained by a similar padding for an $938$ elements witness for $12$ inputs and outputs to $1029$ for $13$, which is padded to $2^{11}=2048$.
+        For a ring size of $11$, Omniring sucessfully fails to have more than $11$ inputs as all slots of the ring signature are used already.
+        The points show the median and the error bars the minimum and maximum time of 30 runs.}
+    \end{figure}
 \end{document}

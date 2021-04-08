@@ -6,10 +6,9 @@ use sha3::{Digest, Sha3_512};
 use rand::{thread_rng, Rng};
 use serde::{Serialize, Deserialize};
 
-use crate::commitment::{TypeCommitment, Type};
+use crate::commitment::{Commitment};
 use crate::lpke::Ciphertext;
 use crate::constants::PEDERSEN_H;
-use crate::aasig;
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -33,8 +32,8 @@ pub type Tag = CompressedRistretto;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OTAccount{
-    pk: RistrettoPoint,
-    pub com: TypeCommitment,
+    pub pk: RistrettoPoint,
+    pub com: Commitment,
     account: Option<Account>,
     eek: Option<Ciphertext>,
     eck: Option<Ciphertext>,
@@ -47,7 +46,7 @@ pub struct OTAccount{
 impl Eq for OTAccount {}
 impl PartialEq for OTAccount{
     fn eq(&self, other: &Self) -> bool {
-        self.pk == other.pk && self.com.com == other.com.com && self.com.etype.unwrap() == other.com.etype.unwrap()
+        self.pk == other.pk && self.com.com == other.com.com
     }
 }
 
@@ -57,7 +56,7 @@ impl Default for OTAccount{
 
         OTAccount {
             pk: RistrettoPoint::random(&mut csrng),
-            com: TypeCommitment::default(),
+            com: Commitment::default(),
             account: None,
             eek: None,
             eck: None,
@@ -65,24 +64,6 @@ impl Default for OTAccount{
             s: None,
             sk: None,
             tag: None,
-        }
-    }
-}
-
-impl aasig::AAMsg for OTAccount {
-    fn to_byte_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(96);
-        buf.extend_from_slice(self.pk.compress().as_bytes());
-        buf.extend_from_slice(self.com.com.compress().as_bytes());
-        buf.extend_from_slice(self.com.etype.unwrap().compress().as_bytes());
-        buf
-    }
-
-    fn publish(&self) -> OTAccount {
-        OTAccount{
-            pk: self.pk,
-            com: self.com.publish(),
-            ..Default::default()
         }
     }
 }
@@ -112,12 +93,11 @@ impl Account {
         }
     }
 
-    pub fn derive_ot(&self, typ: &Type, amount: &Scalar) -> OTAccount{
+    pub fn derive_ot(&self, amount: &Scalar) -> OTAccount{
         let mut csprng = thread_rng();
         let randomness = Scalar::random(&mut csprng);
-        let type_randomness = Scalar::random(&mut csprng);
-        let com = TypeCommitment::commit(typ, amount, &type_randomness, &randomness);
-        let contains = (*typ, *amount, type_randomness, randomness);
+        let com = Commitment::commit(amount, &randomness);
+        let contains = ( *amount, randomness);
         let serialized = serde_cbor::to_vec(&contains).unwrap();
         let ek = thread_rng().gen::<[u8; 32]>();
         let mut hasher = Sha3_512::new();
@@ -153,7 +133,7 @@ impl Account {
             Ok(ek) => ek,
             Err(_) => return Err(AccountError::NotOurAccount)
         };
-        let (typ, amount, type_randomness, randomness): (Type, Scalar, Scalar, Scalar) = serde_cbor::from_slice(&ck).unwrap();
+        let (amount, randomness): (Scalar, Scalar) = serde_cbor::from_slice(&ck).unwrap();
 
         let mut hasher = Sha3_512::new();
         hasher.update(&self.pk.compress().as_bytes());
@@ -164,7 +144,7 @@ impl Account {
         if Account::tag_k_gen(sk) != acc.pk {
             return Err(AccountError::NotOurAccount)
         }
-        let trcom = TypeCommitment::commit(&typ, &amount, &type_randomness, &randomness);
+        let trcom = Commitment::commit(&amount, &randomness);
         if trcom != acc.com {
             return Err(AccountError::NotOurAccount)
         }
@@ -254,7 +234,7 @@ mod tests {
     fn create_account() {
         let acct = Account::new();
         let typ = RistrettoPoint::default();
-        let ota = acct.derive_ot(&typ, &Scalar::from(6u64));
+        let ota = acct.derive_ot(&Scalar::from(6u64));
 
         let rcv = acct.receive_ot(&ota);
 
