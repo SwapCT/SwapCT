@@ -2,6 +2,8 @@
 
 This repository serves as a Proof of Concept implementation of the Swap Confidential Transaction system.
 
+For performance comparison, there is a derived implementation of the Omniring transaction system in the `omniring` branch.
+
 # ATTENTION
 This code is not secure! Do not use it in any relevant setting.
 
