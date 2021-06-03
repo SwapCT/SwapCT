@@ -31,6 +31,10 @@ impl Transaction {
         if self.offer.verify_in_tx().is_err(){
             return Err(TransactionError::InvalidOffer)
         }
+        self.verify_seal()
+    }
+
+    pub fn verify_seal(&self) -> Result<(), TransactionError> {
         let mut tr = Transcript::new(b"seal tx");
         let b = self.seal.verify(&mut tr,&self.offer.inputs.iter().map(|(_,com)|com).collect(), &self.offer.outputs.iter().map(|acc|&acc.com).collect(), &self.fee);
         match b {
