@@ -3,7 +3,7 @@ use merlin::Transcript;
 use bytes::Bytes;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::MultiscalarMul;
+use curve25519_dalek::traits::{MultiscalarMul, VartimeMultiscalarMul};
 use core::iter;
 use serde::{Serialize, Deserialize};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
@@ -59,7 +59,7 @@ impl BPRingSig {
         Gw
     }
 
-    fn get_constraints(len: usize, u: &Scalar, y: &Scalar, z: &Scalar) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar) {
+    fn get_constraints(len: usize, u: &Scalar, y: &Scalar, z: &Scalar) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar) {
 
         let mut v0 = vec![Scalar::zero(), Scalar::zero(), Scalar::zero()];
         let yexps: Vec<Scalar> = exp_iter(*y).take(len).collect();
@@ -91,14 +91,15 @@ impl BPRingSig {
         u3.extend(remu3);
 
         let theta = add_vec(&v0,&smul_vec(&z,&v1));
+        let inv_theta = inv_vec(&theta);
         let mu = add_vec( &add_vec(&smul_vec(&(z*z),&v2) , &smul_vec(&(z*z*z),&v3) ),  &smul_vec(&(z*z*z*z),&v0) );
         let nu = smul_vec(&(z*z*z*z),&v0);
         let omega = smul_vec(&(z*z*z),&u3);
-        let alpha = mul_vec(&inv_vec(&theta), &sub_vec(&omega, &nu));
-        let beta = mul_vec(&inv_vec(&theta), &mu);
+        let alpha = mul_vec(&inv_theta, &sub_vec(&omega, &nu));
+        let beta = mul_vec(&inv_theta, &mu);
         let delta = z*y+z*z*(y+y*y)+inner_product(&alpha, &mu)+(z*z*z*z)*sum_of_powers(y, len);
 
-        (theta, mu, nu, omega, alpha, beta, delta)
+        (theta, inv_theta, mu, nu, omega, alpha, beta, delta)
     }
 }
 
@@ -183,7 +184,7 @@ impl TaggedRingSig for BPRingSig {
         let y = transcript.challenge_scalar(b"y");
         let z = transcript.challenge_scalar(b"z");
 
-        let (theta, mu, _nu, _omega, alpha, _beta, _delta) = BPRingSig::get_constraints(accounts.len(), &u, &y, &z);
+        let (theta, inv_theta, mu, _nu, _omega, alpha, _beta, _delta) = BPRingSig::get_constraints(accounts.len(), &u, &y, &z);
 
         let l_x = VecPoly1(add_vec(&cl,&alpha),sl.clone());
         let r_x = VecPoly1(add_vec(&mul_vec(&theta, &cr),&mu),mul_vec(&theta,&sr));
@@ -224,7 +225,7 @@ impl TaggedRingSig for BPRingSig {
         let Q = ippw * RISTRETTO_BASEPOINT_POINT;
 
         let G_factors: Vec<Scalar> = iter::repeat(Scalar::one()).take(Gw.len()).collect();
-        let H_factors: Vec<Scalar> = inv_vec(&theta);
+        let H_factors: Vec<Scalar> = inv_theta;
 
         let ipp_proof = inner_product_proof::InnerProductProof::create(
             transcript,
@@ -291,12 +292,12 @@ impl TaggedRingSig for BPRingSig {
         transcript.append_scalar(b"r", &self.r);
         transcript.append_scalar(b"t", &self.t);
 
-        let (theta, _mu, _nu, _omega, alpha, beta, delta) = BPRingSig::get_constraints(accounts.len(), &u, &y, &z);
+        let (theta,inv_theta, _mu, _nu, _omega, alpha, beta, delta) = BPRingSig::get_constraints(accounts.len(), &u, &y, &z);
 
         let ippw = transcript.challenge_scalar(b"ippw");
         let Q = ippw * RISTRETTO_BASEPOINT_POINT;
 
-        let ipPmQ = RistrettoPoint::multiscalar_mul(
+        let ipPmQ = RistrettoPoint::vartime_multiscalar_mul(
             iter::once(&Scalar::one())
                 .chain(iter::once(&x))
                 .chain(iter::once(&-self.r))
@@ -311,7 +312,7 @@ impl TaggedRingSig for BPRingSig {
                 .chain(H.iter()));
 
         let G_factors: Vec<Scalar> = iter::repeat(Scalar::one()).take(Gw.len()).collect();
-        let H_factors: Vec<Scalar> = inv_vec(&theta);
+        let H_factors: Vec<Scalar> = inv_theta;
 
         if self.ipp_proof.verify(Gw.len(), transcript, G_factors, H_factors, &ipPmQ, &Q, &Gw, &H).is_err() {
             return Err(RingError::VerificationError)
