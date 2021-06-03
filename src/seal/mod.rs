@@ -73,7 +73,7 @@ impl SealSig{
         Gw
     }
 
-    fn get_constraints(rlen: usize, ilen: usize, olen: usize, u: &Scalar, v: &Scalar, y: &Scalar, z: &Scalar) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar) {
+    fn get_constraints(rlen: usize, ilen: usize, olen: usize, u: &Scalar, v: &Scalar, y: &Scalar, z: &Scalar) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar) {
 
         let m = 3 + rlen + rlen*ilen + olen*64 + 3 * ilen;
 
@@ -132,6 +132,7 @@ impl SealSig{
         u4.extend( vexps  );
 
         let theta = add_vec( &v0.clone(), &smul_vec(z, &v1));
+        let theta_inv = inv_vec(&theta);
         let mut zexp = z*z;
         let mut mu = smul_vec(&zexp, &v2);
         for iterv in vec![v3,v4,v5,v6,v7,v8.clone()] {
@@ -140,11 +141,11 @@ impl SealSig{
         }
         let nu = smul_vec(&(z * z * z * z  *  z * z * z * z), &v8);
         let omega = smul_vec(&(z * z * z * z ), &u4);
-        let alpha = mul_vec(&inv_vec(&theta), &add_vec( &omega, &smul_vec(&(-Scalar::one()),&nu) ) );
-        let beta = mul_vec(&inv_vec(&theta), &mu);
+        let alpha = mul_vec(&theta_inv, &add_vec( &omega, &smul_vec(&(-Scalar::one()),&nu) ) );
+        let beta = mul_vec(&theta_inv, &mu);
         let delta = z * sum_of_powers(y, ilen) + z*z*z*sum_of_powers(y, ilen+1)  + inner_product(&alpha, &mu) + inner_product(&vec![Scalar::one(); m], &nu);
 
-        (theta, mu, nu, omega, alpha, beta, delta)
+        (theta, theta_inv, mu, nu, omega, alpha, beta, delta)
 
     }
 
@@ -172,7 +173,7 @@ impl SealSig{
         for _ in 0..(ring.len()) {
             P.push(transcript.challenge_point(b"blinding Vs"));
         }
-        let Gprime = vec![transcript.challenge_point(b"Gprime"); ring.len()*tags.len() + outputs.len()*64 + 3*tags.len()];
+        let Gprime: Vec<RistrettoPoint> = (0..(ring.len()*tags.len() + outputs.len()*64 + 3*tags.len())).map(|_| transcript.challenge_point(b"Gprime")).collect();
         let H: Vec<RistrettoPoint> = (0..m).map(|_| transcript.challenge_point(b"H")).collect();
 
         let G0 = SealSig::get_G(&u, &v, &ring, &tags,&outputs, &fee, &Scalar::zero(), &P, &Gprime );
@@ -258,7 +259,7 @@ impl SealSig{
         let y = transcript.challenge_scalar(b"y");
         let z = transcript.challenge_scalar(b"z");
 
-        let (theta, mu, _nu, omega, alpha, beta, delta) = SealSig::get_constraints(ring.len(), inputs.len(), outputs.len(), &u, &v, &y, &z);
+        let (theta, theta_inv, mu, _nu, omega, alpha, beta, delta) = SealSig::get_constraints(ring.len(), inputs.len(), outputs.len(), &u, &v, &y, &z);
 
         let l_x = VecPoly1(add_vec(&cl,&alpha),sl.clone());
         let r_x = VecPoly1(add_vec(&mul_vec(&theta, &cr),&mu),mul_vec(&theta,&sr));
@@ -297,7 +298,7 @@ impl SealSig{
 
         let mut G_factors: Vec<Scalar> = iter::repeat(Scalar::one()).take(m).collect();
         G_factors.extend(vec![Scalar::zero(); padlen]);
-        let mut H_factors: Vec<Scalar> = inv_vec(&theta);
+        let mut H_factors: Vec<Scalar> = theta_inv;
         H_factors.extend(vec![Scalar::zero(); padlen]);
 
         let mut lpad = lvec.clone();
@@ -359,7 +360,7 @@ impl SealSig{
         for _ in 0..(ring.len()) {
             P.push(transcript.challenge_point(b"blinding Vs"));
         }
-        let Gprime = vec![transcript.challenge_point(b"Gprime"); ring.len()*tags.len() + outputs.len()*64 + 3*tags.len()];
+        let Gprime: Vec<RistrettoPoint> = (0..(ring.len()*tags.len() + outputs.len()*64 + 3*tags.len())).map(|_| transcript.challenge_point(b"Gprime")).collect();
         let H: Vec<RistrettoPoint> = (0..m).map(|_| transcript.challenge_point(b"H")).collect();
 
         transcript.append_point(b"A commitment", &self.A);
@@ -380,21 +381,30 @@ impl SealSig{
         transcript.append_scalar(b"r", &self.r);
         transcript.append_scalar(b"t", &self.t);
 
-        let (theta, _mu, _nu, _omega, alpha, beta, delta) = SealSig::get_constraints(ring.len(), tags.len(), outputs.len(), &u, &v, &y, &z);
-
-        let rhs = self.A.decompress().unwrap() + x*self.S.decompress().unwrap() + RistrettoPoint::multiscalar_mul(&alpha, &Gw) + RistrettoPoint::multiscalar_mul(&beta, &H);
+        let (theta, theta_inv, _mu, _nu, _omega, alpha, beta, delta) = SealSig::get_constraints(ring.len(), tags.len(), outputs.len(), &u, &v, &y, &z);
 
         let ippw = transcript.challenge_scalar(b"ippw");
 
         let Q = ippw * RISTRETTO_BASEPOINT_POINT;
 
-        let ipPmQ = rhs - (self.r*F) + self.t*Q;
+        let ipPmQ = RistrettoPoint::vartime_multiscalar_mul(iter::once(Scalar::one())
+                                                                .chain(iter::once(x))
+                                                                .chain(alpha)
+                                                                .chain(beta)
+                                                                .chain(iter::once(-self.r))
+                                                                .chain(iter::once(self.t)),
+                                                            iter::once(self.A.decompress().unwrap())
+                                                                .chain(iter::once(self.S.decompress().unwrap()))
+                                                                .chain(Gw.clone()).chain(H.clone())
+                                                                .chain(iter::once(F))
+                                                                .chain(iter::once(Q)));
+
 
         let padlen = m.next_power_of_two() -m;
 
         let mut G_factors: Vec<Scalar> = iter::repeat(Scalar::one()).take(m).collect();
         G_factors.extend(vec![Scalar::zero(); padlen]);
-        let mut H_factors: Vec<Scalar> = inv_vec(&theta);
+        let mut H_factors: Vec<Scalar> = theta_inv;
         H_factors.extend(vec![Scalar::zero(); padlen]);
 
         let mut Gpad = Gw.clone();
@@ -403,6 +413,11 @@ impl SealSig{
             Gpad.push(transcript.challenge_point(b"padding G"));
             Hpad.push(transcript.challenge_point(b"padding H"));
         }
+        
+        if self.ipp_proof.verify(Gpad.len(), transcript, G_factors, H_factors, &ipPmQ, &Q, &Gpad, &Hpad).is_err() {
+            return Err(SealError::VerificationErrorIPP)
+        }
+
 
         let lnd = self.t*RISTRETTO_BASEPOINT_POINT + self.tau*PEDERSEN_H();
         let comsum = exp_iter(y).take(outputs.len()).zip(outputs).map(|(yexp,acct)| (z*z*yexp)*acct.com.com).sum::<RistrettoPoint>();
