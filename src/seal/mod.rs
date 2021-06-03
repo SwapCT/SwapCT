@@ -80,13 +80,18 @@ impl SealSig{
         Gw
     }
 
-    fn get_constraints(ilen: usize, olen: usize, _u: &Scalar, v: &Scalar, y: &Scalar, z: &Scalar) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar) {
+    fn get_constraints(ilen: usize, olen: usize, _u: &Scalar, v: &Scalar, y: &Scalar, z: &Scalar) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Scalar) {
 
         let m = 2+ilen+olen+(olen*ilen + olen*64);
 
         let mut v0 = vec![Scalar::zero(); 2+ilen+olen];
         let yexps: Vec<Scalar> = exp_iter(*y).take(ilen*olen+64*olen).collect();
         v0.extend(yexps);
+
+        let mut v0_inv = vec![Scalar::zero(); 2+ilen+olen];
+        let yinvert = y.invert();
+        let yinvexps: Vec<Scalar> = exp_iter(yinvert).take(ilen*olen+64*olen).collect();
+        v0_inv.extend(yinvexps);
 
         let mut v1 = vec![Scalar::zero(); 2+ilen+olen];
         let yexps: Vec<Scalar> = exp_iter(*y).take(olen+1).collect();
@@ -112,11 +117,14 @@ impl SealSig{
         let theta = v0.clone();
         let mu = add_vec(&add_vec( &smul_vec(z, &v1), &smul_vec(&(z * z), &v2) ), &add_vec(&smul_vec(&(z * z * z), &v3), &smul_vec(&(z * z * z * z), &v0)) );
         let nu = smul_vec(&(z * z * z * z), &v0);
-        let alpha = mul_vec(&inv_vec(&theta), &smul_vec(&(-Scalar::one()),&nu));
-        let beta = mul_vec(&inv_vec(&theta), &mu);
+
+        let inv_theta = v0_inv; // inv_vec(&theta);
+        let alpha = mul_vec(&inv_theta, &smul_vec(&(-Scalar::one()), &nu));
+        let beta = mul_vec(&inv_theta, &mu);
+
         let delta = z * sum_of_powers(y, olen+1) + inner_product(&alpha, &mu) + inner_product(&vec![Scalar::one(); m], &nu);
 
-        (theta, mu, nu, alpha, beta, delta)
+        (theta, inv_theta, mu, nu, alpha, beta, delta)
     }
 
     pub fn sign(transcript: &mut Transcript, inputs: &[&TypeCommitment], outputs: &[&TypeCommitment], fee: &Scalar) -> Result<SealSig, SealError> {
@@ -142,7 +150,7 @@ impl SealSig{
         for _ in 0..(inputs.len()+outputs.len()) {
             P.push(transcript.challenge_point(b"blinding Ps"));
         }
-        let Gprime = vec![transcript.challenge_point(b"Gprime"); outputs.len()*inputs.len() + outputs.len()*64];
+        let Gprime: Vec<RistrettoPoint> = (0..(outputs.len()*inputs.len() + outputs.len()*64)).map(|_| transcript.challenge_point(b"Gprime")).collect();
         let H: Vec<RistrettoPoint> = (0..m).map(|_| transcript.challenge_point(b"H")).collect();
 
         let G0 = SealSig::get_G(&u, &v, &inputs,&outputs, &fee, &Scalar::zero(), &P, &Gprime );
@@ -215,7 +223,7 @@ impl SealSig{
         let y = transcript.challenge_scalar(b"y");
         let z = transcript.challenge_scalar(b"z");
 
-        let (theta, mu, _nu, alpha, _beta, _delta) = SealSig::get_constraints(inputs.len(), outputs.len(), &u, &v, &y, &z);
+        let (theta, inv_theta, mu, _nu, alpha, _beta, _delta) = SealSig::get_constraints(inputs.len(), outputs.len(), &u, &v, &y, &z);
 
         let l_x = VecPoly1(add_vec(&cl,&alpha),sl.clone());
         let r_x = VecPoly1(add_vec(&mul_vec(&theta, &cr),&mu),mul_vec(&theta,&sr));
@@ -260,7 +268,7 @@ impl SealSig{
 
         let mut G_factors: Vec<Scalar> = iter::repeat(Scalar::one()).take(m).collect();
         G_factors.extend(vec![Scalar::zero(); padlen]);
-        let mut H_factors: Vec<Scalar> = inv_vec(&theta);
+        let mut H_factors: Vec<Scalar> = inv_theta;
         H_factors.extend(vec![Scalar::zero(); padlen]);
 
         let mut lpad = lvec.clone();
@@ -320,7 +328,7 @@ impl SealSig{
         for _ in 0..(inputs.len()+outputs.len()) {
             P.push(transcript.challenge_point(b"blinding Ps"));
         }
-        let Gprime = vec![transcript.challenge_point(b"Gprime"); outputs.len()*inputs.len() + outputs.len()*64];
+        let Gprime: Vec<RistrettoPoint> = (0..(outputs.len()*inputs.len() + outputs.len()*64)).map(|_| transcript.challenge_point(b"Gprime")).collect();
         let H: Vec<RistrettoPoint> = (0..m).map(|_| transcript.challenge_point(b"H")).collect();
 
         transcript.append_point(b"A commitment", &self.A);
@@ -341,21 +349,35 @@ impl SealSig{
         transcript.append_scalar(b"r", &self.r);
         transcript.append_scalar(b"t", &self.t);
 
-        let (theta, _mu, _nu, alpha, beta, delta) = SealSig::get_constraints(inputs.len(), outputs.len(), &u, &v, &y, &z);
+        let (theta, inv_theta, _mu, _nu, alpha, beta, delta) = SealSig::get_constraints(inputs.len(), outputs.len(), &u, &v, &y, &z);
 
-        let rhs = self.A.decompress().unwrap() + x*self.S.decompress().unwrap() + RistrettoPoint::multiscalar_mul(&alpha, &Gw) + RistrettoPoint::multiscalar_mul(&beta, &H);
+        //let rhs = self.A.decompress().unwrap() + x*self.S.decompress().unwrap() + RistrettoPoint::multiscalar_mul(&alpha, &Gw) + RistrettoPoint::multiscalar_mul(&beta, &H);
 
         let ippw = transcript.challenge_scalar(b"ippw");
 
         let Q = ippw * RISTRETTO_BASEPOINT_POINT;
 
-        let ipPmQ = rhs - (self.r*F) + self.t*Q;
+        //let ipPmQ = rhs - (self.r*F) + self.t*Q;
+
+        let ipPmQ = RistrettoPoint::vartime_multiscalar_mul(iter::once(Scalar::one())
+                                                              .chain(iter::once(x))
+                                                              .chain(alpha)
+                                                              .chain(beta)
+                                                                   .chain(iter::once(-self.r))
+                                                                   .chain(iter::once(self.t)),
+                                                          iter::once(self.A.decompress().unwrap())
+                                                              .chain(iter::once(self.S.decompress().unwrap()))
+                                                              .chain(Gw.clone()).chain(H.clone())
+                                                              .chain(iter::once(F))
+                                                              .chain(iter::once(Q)));
+
+        //assert_eq!(ipPmQ, newipPmG, "more efficient");
 
         let padlen = m.next_power_of_two() -m;
 
         let mut G_factors: Vec<Scalar> = iter::repeat(Scalar::one()).take(m).collect();
         G_factors.extend(vec![Scalar::zero(); padlen]);
-        let mut H_factors: Vec<Scalar> = inv_vec(&theta);
+        let mut H_factors: Vec<Scalar> = inv_theta;
         H_factors.extend(vec![Scalar::zero(); padlen]);
 
         let mut Gpad = Gw.clone();
