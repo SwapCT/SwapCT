@@ -14,6 +14,7 @@ use crate::{constants, vsigma};
 use crate::ringsig::TaggedRingSig;
 use crate::account::OTAccount;
 use crate::commitment::TypeCommitment;
+use crate::vsigma::VSigmaProof;
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -49,10 +50,9 @@ pub struct AASig<Algo: TaggedRingSig, Msg: AAMsg> {
     randomness: Scalar,
 }
 
-impl<Algo: TaggedRingSig + Default + Send + Sync, Msg: AAMsg + Send + Sync> AASig<Algo, Msg> {
+impl<Algo: TaggedRingSig + Default + Send + Sync + Clone, Msg: AAMsg + Send + Sync> AASig<Algo, Msg> {
     pub fn sign(signers: &Vec<(&Vec<OTAccount>, &usize, &TypeCommitment)>, msgs: &Vec<Msg>) -> Result<AASig<Algo, Msg>, AAError> {
         let mut sig = AASig::<Algo, Msg>::default();
-        let mut csprng = thread_rng();
 
         if signers.len() < 1 {
             return Err(AAError::ArgumentNumberError)
@@ -61,12 +61,10 @@ impl<Algo: TaggedRingSig + Default + Send + Sync, Msg: AAMsg + Send + Sync> AASi
             return Err(AAError::ArgumentNumberError)
         }
 
-        let mut cum_s = Scalar::zero();
-        sig.randomness = Scalar::zero();
+        let mut csprng = thread_rng();
+        let sr_exp:Vec<(Scalar,Scalar)> = msgs.iter().map(|_|(Scalar::random(&mut csprng),Scalar::random(&mut csprng))).collect();
 
-        for msg in msgs {
-            let s_exp = Scalar::random(&mut csprng);
-            let r_exp = Scalar::random(&mut csprng);
+        let outside: Vec<(Scalar, Scalar, (VSigmaProof, CompressedRistretto, Msg))> = msgs.par_iter().zip(sr_exp).map(|(msg,(s_exp,r_exp))|{
             let mut transcript = Transcript::new(b"output knowledge");
             let (proof, tmpcom) = vsigma::VSigmaProof::prove(&mut transcript, &vec![s_exp, r_exp], &vec![RISTRETTO_BASEPOINT_POINT, constants::PEDERSEN_H()]
             ).expect("something went very wrong");
@@ -76,20 +74,20 @@ impl<Algo: TaggedRingSig + Default + Send + Sync, Msg: AAMsg + Send + Sync> AASi
             hasher.update(&msg.to_byte_vec());
 
             let output_hash = Scalar::from_hash(hasher);
-            cum_s = cum_s + s_exp + output_hash;
+            (s_exp + output_hash, r_exp, (proof, tmpcom.compress(), (*msg).clone()) )
+        }).collect();
 
-            sig.randomness += r_exp;
-            sig.output_proofs.push((proof, tmpcom.compress(), (*msg).clone()));
-        }
+        let cum_s: Scalar = outside.iter().map(|(s,_,_)|s).sum();
+        sig.randomness = outside.iter().map(|(_,r,_)|r).sum();
+        sig.output_proofs = outside.iter().map(|(_,_,p)|p.clone()).collect();
 
-        let mut cum_x = Scalar::zero();
-        for (i, (accts,index, com)) in signers.iter().enumerate() {
-            let mut random_exponent = Scalar::random(&mut csprng);
-            if i < signers.len() - 1 {
-                cum_x += random_exponent;
-            } else {
-                random_exponent = cum_s - cum_x;
-            }
+
+        let mut random_exponents: Vec<Scalar> = signers.iter().map(|_| Scalar::random(&mut csprng) ).collect();
+        let mut rsum: Scalar = random_exponents.iter().sum();
+        rsum -= random_exponents[0];
+        random_exponents[0] = cum_s - rsum;
+
+        let sigs: Vec<Result<(VSigmaProof, CompressedRistretto, Algo, CompressedRistretto ),AAError>> = signers.par_iter().zip(random_exponents).map(|((accts,index, com),random_exponent)| {
             let mut transcript = Transcript::new(b"input knowledge");
             let (proof, tmpcom) = vsigma::VSigmaProof::prove(&mut transcript, &vec![random_exponent], &vec![RISTRETTO_BASEPOINT_POINT]
             ).expect("something went wrong in the input");
@@ -100,8 +98,15 @@ impl<Algo: TaggedRingSig + Default + Send + Sync, Msg: AAMsg + Send + Sync> AASi
                 Ok(x) => x,
                 Err(_e) => return Err(AAError::ArgumentNumberError)
             };
-            sig.input_proofs.push((proof, tmpcom.compress(), setsig, com.com.compress()));
+            Ok((proof, tmpcom.compress(), setsig, com.com.compress()))
+        }).collect();
+
+        match sigs.iter().find(|res| res.is_err()) {
+            Some(_) => return Err(AAError::ArgumentNumberError),
+            _ => {}
         }
+        sig.input_proofs = sigs.iter().map(|res| res.as_ref().unwrap().clone()).collect();
+
         sig.normalize();
         Ok(sig)
     }
@@ -202,7 +207,7 @@ impl<Algo: TaggedRingSig + Default + Send + Sync, Msg: AAMsg + Send + Sync> AASi
     }
 }
 
-impl<Algo: TaggedRingSig + Default + Send + Sync, Msg: AAMsg + Send + Sync> Add for AASig<Algo, Msg> {
+impl<Algo: TaggedRingSig + Default + Send + Sync + Clone, Msg: AAMsg + Send + Sync> Add for AASig<Algo, Msg> {
     type Output = AASig<Algo, Msg>;
     fn add(self, other: AASig<Algo, Msg>) -> AASig<Algo, Msg> {
         let mut ips = Vec::from(self.input_proofs);
