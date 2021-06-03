@@ -11,6 +11,7 @@ use crate::account::{OTAccount, Account, Tag};
 use crate::commitment::{TypeCommitment, Type};
 use crate::seal::SealSig;
 use crate::transaction::Transaction;
+use std::ops::Add;
 
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -135,6 +136,23 @@ pub fn get_test_ring(n: usize) -> Vec<OTAccount> {
     accounts
 }
 
+impl Add for Offer{
+    type Output = Offer;
+
+    fn add(self, rhs: Self) -> Self::Output {
+
+        let mut inputs = self.inputs;
+        inputs.extend(rhs.inputs);
+        let mut outputs = self.outputs;
+        outputs.extend(rhs.outputs);
+        Offer{
+            aasig: self.aasig+rhs.aasig,
+            inputs,
+            outputs
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,5 +180,21 @@ mod tests {
         //println!("serialized = {}", serialized);
         let deserialized: Offer = serde_json::from_str(&serialized).unwrap();
         assert!(deserialized.verify().is_ok());
+    }
+
+    #[test]
+    fn merge_offer() {
+        let acct = Account::new();
+        let typ = TypeCommitment::type_gen(&String::from("mytype"));
+        let ota = acct.derive_ot(&typ, &Scalar::from(6u64));
+
+        let off = Offer::offer(&vec![ota], &vec![(&acct, &typ, &Scalar::from(6u64))], &vec![get_test_ring(3)]);
+        let puboff = off.publish();
+
+        let ota2 = acct.derive_ot(&typ, &Scalar::from(8u64));
+        let off2 = Offer::offer(&vec![ota2], &vec![(&acct, &typ, &Scalar::from(6u64))], &vec![get_test_ring(3)]);
+        let puboff2 = off2.publish();
+
+        assert!((puboff+puboff2).verify().is_ok());
     }
 }
