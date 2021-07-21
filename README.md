@@ -8,15 +8,7 @@ This code is not secure! Do not use it in any relevant setting.
 
 # Usage
 
-You need a recent (1.48) rust installation with cargo.
-
-## Test
-
-To run the unit tests, use
-
-    cargo test
-
-# Performance
+## Performance
 
 ![Performance Plot](plots/example.png)
 
@@ -30,16 +22,21 @@ In SwapCT, the jump from 12 to 13 is explained by a similar padding from an 938 
 For a ring size of 11, Omniring sucessfully fails to have more than 11 inputs as all slots of the ring signature are used already.
 
 
-# Run Manually
+## Run Manually
 
 As the authors promote the creation of reproducible results and it is hard to give absolute performance figures, 
 we encourage you to recreate the generation and verification times in your environment.
+
+You need a recent (>=1.48) rust installation with cargo.
+An easy setup method for a rust environment on your operating system is https://rustup.rs/
 
 To generate the timings run
 
     cargo run --bin plots --release -- -r 123 -o 20 -s 30 
 
-which presents you a progress bar and the parameters used, e.g.
+Be aware that this takes around 40 seconds to build and 10 minutes to run on a modern CPU.
+
+While running, it presents you a progress bar and the parameters used, e.g.
     
      Finished release [optimized] target(s) in 0.05s
       Running `target/release/plots -r 27 -o 5 -s 4`
@@ -53,3 +50,15 @@ To plot them nicely in comparison to the authors measurements, change to the plo
     pdflatex main.tex
    
 and enjoy the results in `main.pdf`
+
+
+## Test
+
+The modules written include a few unit tests which helped during development and may serve as examples on how to interact with the library.
+They capture the most basic operations, such as transaction generation and verification (`transaction::tests::create_tx`). For the lower level modules, the tests check e.g. basic one-time account creation and receiving (`account::tests::create_account`).
+By no means are they exhaustive and cover all code.
+
+
+To run the unit tests, use
+
+    cargo test
