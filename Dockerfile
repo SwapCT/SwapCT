@@ -1,4 +1,4 @@
-FROM rust:1.48
+FROM rust:1.52
 
 WORKDIR /usr/src/swapct
 
